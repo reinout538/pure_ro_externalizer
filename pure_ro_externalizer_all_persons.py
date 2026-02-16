@@ -69,15 +69,16 @@ for count, publ_uuid in enumerate(publ_uuids):
     contrib_list = pure_record.contributors
     int_org_list = pure_record.internal_orgs
     ext_org_list = pure_record.external_orgs
-
+    
     #loop through publication contributors
     for index, contributor in enumerate(contrib_list):
 
         #remove internal Id (causes error when you feed it back to Pure)
         contributor.pop("pureId", None)
+        print (contributor)
 
         #check if not external person
-        if contributor['typeDiscriminator'] == 'ExternalContributorAssociation':
+        if contributor['typeDiscriminator'] in ['ExternalContributorAssociation', 'AuthorCollaborationContributorAssociation']:
             continue
         
         #get pure publication object
