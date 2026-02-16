@@ -40,6 +40,13 @@ class getPurePerson():
              self.affil_first_dt = self.get_affil_dates(json_pure_person)[0]
              self.affil_last_dt = self.get_affil_dates(json_pure_person)[1]
              self.years_at_vu = self.get_affil_dates(json_pure_person)[2]
+             self.keyword_groups = json_pure_person.get('keywordGroups')
+             self.links = json_pure_person.get('links')
+             self.academic_qualifications = json_pure_person.get('academicQualifications')
+             self.professional_qualifications = json_pure_person.get('professionalQualifications')
+             self.profile_photos = json_pure_person.get('profilePhotos')
+             self.profile_information = json_pure_person.get('profileInformation')
+             
                                    
         else:
             self.json = self.uuid = self.pure_id = self.default_lname = self.default_init = self.orcid = self.visibility = self.identifiers = self.affil_first_dt = self.affil_last_dt = None
@@ -80,11 +87,12 @@ class getPurePerson():
           
 #try it out
 """
-person_uuids = ["07ef5f2c-a476-49b3-b987-bae12d168867"]
+person_uuids = ["9a73848d-d8e8-49fe-a11b-9db42736191d"]
 
 for UUID in person_uuids:
 
      pure_person = getPurePerson(UUID)
+     print (json.dumps(pure_person.json, indent = 3))
 
      for key, value in pure_person.__dict__.items():
          print(f"{key}: {value}")
