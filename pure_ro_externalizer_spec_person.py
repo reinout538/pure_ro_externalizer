@@ -76,10 +76,13 @@ for count, publ_uuid in enumerate(publ_uuids):
     contrib_list = pure_record.contributors
     int_org_list = pure_record.internal_orgs
     ext_org_list = pure_record.external_orgs
-
+    
     #loop through publication contributors
     for index, contributor in enumerate(contrib_list):
         contributor.pop("pureId", None)
+        #check if not external person
+        if contributor['typeDiscriminator'] == 'ExternalContributorAssociation':
+            continue
         #check if author is the one that should be evaluated
         if contributor['person']['uuid'] == uuid_author:
             #add affiliated internal org to removal list
