@@ -37,6 +37,12 @@ mou_vu_json = {
     "uuid": "971a8f57-d401-4e8b-9b1a-a1b97e46e0ea"
   }
 
+workflow = {
+    "step": "approved",
+    "description": {
+      "en_GB": "Validated"
+    }}
+
 #MAIN
 
 #df log files
@@ -122,14 +128,32 @@ for count, publ_uuid in enumerate(publ_uuids):
 
                     #create or update ext org list
                     if ext_org_list != None:
-                        ext_org_list.append(ext_org_json['externalOrganizations'][0])
+                        if ext_org_json['externalOrganizations'][0] not in ext_org_list:
+                            ext_org_list.append(ext_org_json['externalOrganizations'][0])
                     else:
                         ext_org_list = ext_org_json['externalOrganizations']
-                else:
+                else:                    
                      pass
             else:
-                continue
+                #add external organization if none present
+                if 'externalOrganizations' not in contributor:
+                    #build new contributor record with entry for ext org
+                    new_contrib = {}
+                    for key, value in contributor.items():
+                        new_contrib[key] = value
+                        if key == "typeDiscriminator":
+                            new_contrib.update(ext_org_json)
+                    #replace contributor record
+                    contrib_list[index] = new_contrib
 
+                    #create or update ext org list
+                    if ext_org_list != None:
+                        if ext_org_json['externalOrganizations'][0] not in ext_org_list:
+                            ext_org_list.append(ext_org_json['externalOrganizations'][0])
+                    else:
+                        ext_org_list = ext_org_json['externalOrganizations']
+                
+    print(ext_org_list)
     #remove int orgs that should be kept from remove list
     remove_int_orgs = [org for org in remove_int_orgs if org not in keep_int_orgs]
     #remove int orgs removed on the contributor level from top level list
@@ -146,23 +170,26 @@ for count, publ_uuid in enumerate(publ_uuids):
     #UPDATE Pure
     if int_org_list != []:
         fully_external = False
-        contrib_upd_json = json.dumps({"contributors": contrib_list, "organizations": int_org_list, "externalOrganizations": ext_org_list}, indent=4)
+        contrib_upd_json = json.dumps({"contributors": contrib_list, "organizations": int_org_list, "externalOrganizations": ext_org_list, "workflow": workflow}, indent=4)
         if dryrun:
             print(f"DRYRUN: would update record {publ_uuid}")
             update_log = "DRYRUN"
         else:
             response_put_contrib = requests.put(PURE_BASE_URL+'/ws/api/research-outputs/'+publ_uuid, data = contrib_upd_json, headers={'Accept': 'application/json', 'Content-Type': 'application/json', 'api-key': PURE_CRUD_API_KEY})
+            update_log = response_put_contrib.status_code
             print ('status code update: ', response_put_contrib.status_code)
     else:
         #fully external - update MOU to VU
         fully_external = True
-        contrib_upd_json = json.dumps({"contributors": contrib_list, "organizations": int_org_list, "externalOrganizations": ext_org_list, "managingOrganization": mou_vu_json}, indent=4)
+        contrib_upd_json = json.dumps({"contributors": contrib_list, "organizations": int_org_list, "externalOrganizations": ext_org_list, "managingOrganization": mou_vu_json, "workflow": workflow}, indent=4)
+        print(contrib_upd_json)
         if dryrun:
             print(f"DRYRUN: would update record {publ_uuid}")
             update_log = "DRYRUN"
         else:
             response_put_contrib = requests.put(PURE_BASE_URL+'/ws/api/research-outputs/'+publ_uuid, data = contrib_upd_json, headers={'Accept': 'application/json', 'Content-Type': 'application/json', 'api-key': PURE_CRUD_API_KEY})
-            print ('status code update: ', response_put_contrib.status_code)
+            update_log = response_put_contrib.status_code
+            print ('status code update: ', response_put_contrib.reason)
     
     df_log.loc[len(df_log.index)] = [datetime.datetime.now(), publ_uuid, pure_record.status, action_log, update_log, fully_external]   
     
