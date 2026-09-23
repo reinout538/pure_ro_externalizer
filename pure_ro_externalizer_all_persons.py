@@ -68,7 +68,7 @@ for count, publ_uuid in enumerate(publ_uuids):
     if pure_record.workflow == 'approved':
         print ('already approved - skip record')
         action_log = "skipped - approved record"
-        df_log.loc[len(df_log.index)] = [datetime.datetime.now(), publ_uuid, action_log, update_log, fully_external]   
+        df_log.loc[len(df_log.index)] = [datetime.datetime.now(), publ_uuid, pure_record.status, action_log, update_log, fully_external]   
         continue
     
     remove_int_orgs = []
