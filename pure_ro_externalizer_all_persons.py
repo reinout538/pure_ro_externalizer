@@ -11,9 +11,14 @@ from config import PURE_BASE_URL, PURE_524_API_KEY, PURE_CRUD_API_KEY, SCOPUS_AP
 from get_pure_record import getPure, get_pure
 from get_pure_person import getPurePerson
 
+# dry run mode
+dryrun = input("Dry run only (no updates to Pure)? [y/N]: ").strip().lower() == "y"
+if dryrun:
+    print("*** DRY RUN ENABLED - NO UPDATES WILL BE SENT TO PURE ***")
+
 #get input
-input_uuids = input('Enter one or more Pure RO UUIDs (comma separated, without spaces) : ')
-publ_uuids = input_uuids.split(",")
+input_uuids = input('Enter one or more Pure RO UUIDs (comma separated) : ')
+publ_uuids = [uuid.strip() for uuid in input_uuids.split(',') if uuid.strip()]
 
 uuid_extorg = '3ca7f9ae-5220-4ef9-a4fe-6dd2ba6f1cef' #unknown ext org uuid
 
@@ -35,7 +40,7 @@ mou_vu_json = {
 #MAIN
 
 #df log files
-df_log = pd.DataFrame(columns=['date','publ_uuid', 'action', 'update'])
+df_log = pd.DataFrame(columns=['date','publ_uuid', 'get', 'action', 'update', 'fully_external'])
 
 #create session log directory
 file_dir = sys.path[0]
@@ -51,17 +56,19 @@ os.makedirs (path_session)
 for count, publ_uuid in enumerate(publ_uuids):
 
     print ('processing: ',publ_uuid, 'record ', count+1, 'of ', len(publ_uuids))
-    action_log = ''
-    update_log = ''
+    action_log = update_log = fully_external = None
     
     #get pure publication object
     pure_record = getPure(publ_uuid)
-        
+    print(json.dumps(pure_record.status, indent = 4))
+    if not pure_record.status == 200:
+        df_log.loc[len(df_log.index)] = [datetime.datetime.now(), publ_uuid, pure_record.status, action_log, update_log, fully_external]
+        continue
     #check if record is validated
-    if pure_record.workflow == 'xapproved':
+    if pure_record.workflow == 'approved':
         print ('already approved - skip record')
         action_log = "skipped - approved record"
-        df_log.loc[len(df_log.index)] = [datetime.datetime.now(), publ_uuid, action_log, update_log]   
+        df_log.loc[len(df_log.index)] = [datetime.datetime.now(), publ_uuid, action_log, update_log, fully_external]   
         continue
     
     remove_int_orgs = []
@@ -75,7 +82,6 @@ for count, publ_uuid in enumerate(publ_uuids):
 
         #remove internal Id (causes error when you feed it back to Pure)
         contributor.pop("pureId", None)
-        print (contributor)
 
         #check if not external person
         if contributor['typeDiscriminator'] in ['ExternalContributorAssociation', 'AuthorCollaborationContributorAssociation']:
@@ -84,8 +90,9 @@ for count, publ_uuid in enumerate(publ_uuids):
         #get pure publication object
         pure_person = getPurePerson(contributor['person']['uuid'])
 
-        #check if publication year within years at VU from person record
-        if pure_record.pub_yr_first in pure_person.years_at_vu:
+        #check if publication year within years at VU from person record OR if later - within 3 years after person left VU
+        
+        if pure_record.pub_yr_first in pure_person.years_at_vu or 0 <= pure_record.pub_yr_first - max(pure_person.years_at_vu) < 4:
             if 'organizations' in contributor:                
                 for int_org in contributor['organizations']:
                     keep_int_orgs.append(int_org['uuid'])
@@ -138,18 +145,26 @@ for count, publ_uuid in enumerate(publ_uuids):
     
     #UPDATE Pure
     if int_org_list != []:
+        fully_external = False
         contrib_upd_json = json.dumps({"contributors": contrib_list, "organizations": int_org_list, "externalOrganizations": ext_org_list}, indent=4)
-        response_put_contrib = requests.put(PURE_BASE_URL+'/ws/api/research-outputs/'+publ_uuid, data = contrib_upd_json, headers={'Accept': 'application/json', 'Content-Type': 'application/json', 'api-key': PURE_CRUD_API_KEY})
+        if dryrun:
+            print(f"DRYRUN: would update record {publ_uuid}")
+            update_log = "DRYRUN"
+        else:
+            response_put_contrib = requests.put(PURE_BASE_URL+'/ws/api/research-outputs/'+publ_uuid, data = contrib_upd_json, headers={'Accept': 'application/json', 'Content-Type': 'application/json', 'api-key': PURE_CRUD_API_KEY})
+            print ('status code update: ', response_put_contrib.status_code)
     else:
+        #fully external - update MOU to VU
+        fully_external = True
         contrib_upd_json = json.dumps({"contributors": contrib_list, "organizations": int_org_list, "externalOrganizations": ext_org_list, "managingOrganization": mou_vu_json}, indent=4)
-        response_put_contrib = requests.put(PURE_BASE_URL+'/ws/api/research-outputs/'+publ_uuid, data = contrib_upd_json, headers={'Accept': 'application/json', 'Content-Type': 'application/json', 'api-key': PURE_CRUD_API_KEY})
-
-    print (contrib_upd_json)
+        if dryrun:
+            print(f"DRYRUN: would update record {publ_uuid}")
+            update_log = "DRYRUN"
+        else:
+            response_put_contrib = requests.put(PURE_BASE_URL+'/ws/api/research-outputs/'+publ_uuid, data = contrib_upd_json, headers={'Accept': 'application/json', 'Content-Type': 'application/json', 'api-key': PURE_CRUD_API_KEY})
+            print ('status code update: ', response_put_contrib.status_code)
     
-    print ('status code update: ', response_put_contrib.status_code)
-    print ('status text update: ', response_put_contrib.reason)
-    update_log = response_put_contrib.status_code
-    df_log.loc[len(df_log.index)] = [datetime.datetime.now(), publ_uuid, action_log, update_log]   
+    df_log.loc[len(df_log.index)] = [datetime.datetime.now(), publ_uuid, pure_record.status, action_log, update_log, fully_external]   
     
 #write operations log
 df_log.to_csv(os.path.join(path_session, "operations_log.csv"), encoding='utf-8', index = False)
